@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+
+# Oracle Instant Client (too large for git)
+instantclient_*/
+
+# Environment variables & Local Config
+.env
+oracle_config.json
+!oracle_config.example.json
+
+# Logs & Exports
+*.log
+exports/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

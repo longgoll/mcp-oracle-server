@@ -1,0 +1,29 @@
+{
+  "databases": [
+    {
+      "name": "default",
+      "user": "YOUR_USERNAME",
+      "password": "YOUR_PASSWORD",
+      "host": "localhost",
+      "port": "1521",
+      "service_name": "ORCL"
+    },
+    {
+      "name": "prod_db",
+      "user": "ADMIN_USER",
+      "password": "SECURE_PASSWORD",
+      "dsn": "production.host:1521/service_name",
+      "mode": "SYSDBA"
+    }
+  ],
+  "global_settings": {
+    "oracle_client_path": "./instantclient_23_0",
+    "default_database": "default",
+    "pool_min": 2,
+    "pool_max": 10,
+    "pool_increment": 1,
+    "max_rows_display": 100,
+    "default_page_size": 50,
+    "export_directory": "./exports"
+  }
+}
