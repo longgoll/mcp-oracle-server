@@ -65,33 +65,66 @@ def get_pool(db_name: Optional[str] = None) -> oracledb.ConnectionPool:
         
         db_conf = DATABASES[db_name]
         try:
-            pool = oracledb.create_pool(
-                user=db_conf["user"],
-                password=db_conf["password"],
-                dsn=db_conf["dsn"],
-                min=POOL_MIN_CONNECTIONS,
-                max=POOL_MAX_CONNECTIONS,
-                increment=POOL_INCREMENT,
-                mode=oracledb.SYSDBA if db_conf.get("mode", "").upper() == "SYSDBA" else oracledb.DEFAULT_AUTH
-            )
-            _pools[db_name] = pool
-            logger.info(f"Connection pool created for '{db_name}'")
+            # For SYSDBA mode, we cannot use pool - must use direct connection
+            if db_conf.get("mode", "").upper() == "SYSDBA":
+                _pools[db_name] = None  # Signal to use direct connection
+                logger.info(f"SYSDBA mode configured for '{db_name}' - will use direct connections")
+            else:
+                pool = oracledb.create_pool(
+                    user=db_conf["user"],
+                    password=db_conf["password"],
+                    dsn=db_conf["dsn"],
+                    min=POOL_MIN_CONNECTIONS,
+                    max=POOL_MAX_CONNECTIONS,
+                    increment=POOL_INCREMENT
+                )
+                _pools[db_name] = pool
+                logger.info(f"Connection pool created for '{db_name}'")
         except Exception as e:
              logger.error(f"Failed to create pool for '{db_name}': {e}")
              raise
 
-    return _pools[db_name]
+    return _pools.get(db_name)
 
 @contextmanager
 def get_connection(db_name: Optional[str] = None):
-    """Context manager for getting a connection from the specific pool."""
+    """Context manager for getting a connection from pool or direct for SYSDBA."""
     try:
-        pool = get_pool(db_name)
-        conn = pool.acquire()
-        try:
-            yield conn
-        finally:
-            pool.release(conn)
+        # Resolve Database Name
+        if not db_name:
+            db_name = GLOBAL_CONFIG["default_db"]
+        
+        if db_name not in DATABASES:
+            if "default" not in DATABASES and len(DATABASES) > 0:
+                db_name = list(DATABASES.keys())[0]
+            else:
+                raise ValueError(f"Database '{db_name}' not defined.")
+        
+        # Ensure pool/config is initialized
+        get_pool(db_name)
+        
+        db_conf = DATABASES[db_name]
+        
+        # Check if SYSDBA mode - use direct connection
+        if db_conf.get("mode", "").upper() == "SYSDBA":
+            conn = oracledb.connect(
+                user=db_conf["user"],
+                password=db_conf["password"],
+                dsn=db_conf["dsn"],
+                mode=oracledb.SYSDBA
+            )
+            try:
+                yield conn
+            finally:
+                conn.close()
+        else:
+            # Use pool
+            pool = _pools[db_name]
+            conn = pool.acquire()
+            try:
+                yield conn
+            finally:
+                pool.release(conn)
     except Exception as e:
         logger.error(f"Connection error (DB: {db_name}): {e}")
         raise
