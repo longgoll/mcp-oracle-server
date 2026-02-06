@@ -80,7 +80,18 @@ Chúng tôi đã tối ưu hóa quá trình cài đặt vào một file script d
       ```
     - Script này sẽ tự động cài đặt các thư viện Python cần thiết và đăng ký lệnh `mcp-oracle-server`.
 
-### Bước 2: Cấu hình Kết nối Database
+### Bước 2: Tải Oracle Instant Client (Bắt buộc)
+
+Do Oracle Instant Client có dung lượng lớn và cấp phép riêng, chúng tôi không thể bao gồm nó trong mã nguồn (git). Bạn cần tải xuống thủ công:
+
+1.  Truy cập trang **[Oracle Instant Client for Windows x64](https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html)**.
+2.  Tải xuống gói **Basic Package** (ví dụ: `instantclient-basic-windows.x64-23.x.x.x.zip`).
+3.  Giải nén file zip vào thư mục gốc của dự án này.
+4.  Bạn sẽ có một thư mục tên dạng `instantclient_23_0` (hoặc phiên bản tương ứng).
+
+> **Lưu ý**: Ghi nhớ đường dẫn đầy đủ tới thư mục này để dùng cho cấu hình bên dưới.
+
+### Bước 3: Cấu hình Kết nối Database
 
 Bạn có 2 cách để cấu hình database.
 
@@ -159,9 +170,9 @@ Cách này giữ file cấu hình trong thư mục mã nguồn dự án.
 }
 ```
 
-> **Lưu ý**: `oracle_client_path` phải trỏ đúng đến thư mục chứa file `oci.dll`. Trong dự án đã có sẵn thư mục `instantclient_23_0`, bạn nên dùng đường dẫn tuyệt đối như ví dụ trên để tránh lỗi.
+> **Lưu ý**: `oracle_client_path` phải trỏ đúng đến thư mục bạn vừa giải nén (chứa file `oci.dll`). Hãy dùng đường dẫn tuyệt đối để tránh lỗi.
 
-### Bước 3: Cấu hình AI Client (`mcp_config.json`)
+### Bước 4: Cấu hình AI Client (`mcp_config.json`)
 
 Để AI (Google Gemini, Antigravity, VS Code) nhận diện được server này, bạn cần khai báo nó trong file cấu hình MCP của client.
 

@@ -83,7 +83,18 @@ We have simplified the installation process into a single script.
       ```
     - This script will automatically install Python dependencies and register the `mcp-oracle-server` package.
 
-### Step 2: Configure Database Connections
+### Step 2: Download Oracle Instant Client (Required)
+
+Since Oracle Instant Client is large and has proprietary licensing, we cannot include it in the source code (git). You need to download it manually:
+
+1.  Visit **[Oracle Instant Client for Windows x64](https://www.oracle.com/database/technologies/instant-client/winx64-64-downloads.html)**.
+2.  Download the **Basic Package** (e.g., `instantclient-basic-windows.x64-23.x.x.x.zip`).
+3.  Extract the zip file into the root directory of this project.
+4.  You will have a folder like `instantclient_23_0` (or similar version).
+
+> **Note**: Remember the full path to this directory for the configuration below.
+
+### Step 3: Configure Database Connections
 
 You have two options to configure your database connections.
 
@@ -157,7 +168,7 @@ This method keeps the configuration inside the project folder.
 }
 ```
 
-> **Note:** `oracle_client_path` must point to the folder containing `oci.dll`. We have included a valid client in `instantclient_23_0` inside the project for your convenience (e.g., `D:\Projects\mcp-oracle-server\instantclient_23_0`).
+> **Note:** `oracle_client_path` must point to the folder you just extracted (containing `oci.dll`). Ensure you use an absolute path to avoid errors.
 
 ## 📁 Project Structure
 
