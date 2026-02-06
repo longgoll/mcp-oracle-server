@@ -10,7 +10,7 @@ Một **Model Context Protocol (MCP)** server toàn diện cho các thao tác Or
 - **Khám phá Thông minh (Smart Discovery)**: Công cụ `locate_table` giúp AI tự tìm bảng dữ liệu nằm ở đâu.
 - **Connection Pooling**: Quản lý kết nối hiệu quả cho từng database.
 
-### Các công cụ có sẵn (22+)
+### Các công cụ có sẵn
 
 #### 🌐 Khám phá & Kết nối (Mới!)
 
@@ -291,7 +291,17 @@ list_tables(database_name="finance_prod")
 describe_table("PRODUCTS")
 ```
 
-### 4. Nhập liệu An toàn (Data Import)
+### 4. Giám sát & Hiệu suất
+
+```python
+# Phân tích kế hoạch thực thi truy vấn
+explain_query_plan("SELECT * FROM large_table WHERE status = 'ACTIVE'")
+
+# Kiểm tra sức khỏe hệ thống trên tất cả các pool
+get_session_info()
+```
+
+### 5. Nhập liệu An toàn (Data Import)
 
 ```python
 # Bước 1: Phân tích file và lấy đề xuất ghép cột

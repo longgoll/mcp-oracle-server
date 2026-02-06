@@ -15,7 +15,7 @@ A comprehensive **Model Context Protocol (MCP)** server for Oracle Database oper
 - **Query Logging** - Automatic logging with performance tracking
 - **Markdown Output** - Beautiful formatted results for AI consumption
 
-### Available Tools (22+)
+### Available Tools
 
 #### 🌐 Discovery & Connection (New!)
 
@@ -261,27 +261,17 @@ list_tables(database_name="finance_prod")
 describe_table("PRODUCTS")
 ```
 
-### 4. Advanced Operations
-
-```python
-# Get table statistics
-get_table_statistics("EMPLOYEES", database_name="HR_PROD")
-
-# Compare two table schemas
-compare_table_schemas("EMPLOYEES", "EMPLOYEES_BACKUP")
-```
-
-### 5. Monitoring
+### 4. Monitoring
 
 ```python
 # View execution plan
-explain_plan("SELECT * FROM large_table WHERE status = 'ACTIVE'")
+explain_query_plan("SELECT * FROM large_table WHERE status = 'ACTIVE'")
 
 # Check system health across all pools
 get_session_info()
 ```
 
-### 6. Safe Data Import
+### 5. Safe Data Import
 
 ```python
 # Step 1: Analyze file and get mapping proposal
