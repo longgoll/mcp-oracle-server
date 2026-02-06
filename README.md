@@ -61,9 +61,11 @@ _(All tools now support optional `database_name` argument)_
 
 #### 📤 Import/Export
 
-| Tool                  | Description                      |
-| --------------------- | -------------------------------- |
-| `export_query_to_csv` | Export query results to CSV file |
+| Tool                    | Description                                                |
+| ----------------------- | ---------------------------------------------------------- |
+| `export_query_to_csv`   | Export query results to CSV file                           |
+| `analyze_import_file`   | **Step 1:** Validate & map CSV/Excel file before import    |
+| `import_data_from_file` | **Step 2:** Execute batch import (requires analysis first) |
 
 ## 🚀 Installation & Setup Guide
 
@@ -81,55 +83,19 @@ We have simplified the installation process into a single script.
       ```
     - This script will automatically install Python dependencies and register the `mcp-oracle-server` package.
 
-### Step 2: Configure Database Connections (`oracle_config.json`)
+### Step 2: Configure Database Connections
 
-This file tells the server how to connect to your Oracle databases.
+You have two options to configure your database connections.
 
-1.  Find the file `oracle_config.example.json` in the project folder.
-2.  Rename it to `oracle_config.json`.
-3.  Open it and update with your actual database details.
+#### Option 1: Centralized Configuration (Recommended)
 
-**Example `oracle_config.json`:**
+You can embed the Oracle configuration directly into your MCP client configuration file (e.g., `mcp_config.json`). This keeps all your settings in one place and allows you to switch projects without losing connection details.
 
-```json
-{
-  "databases": [
-    {
-      "name": "dev",
-      "user": "your_username",
-      "password": "your_password",
-      "host": "localhost",
-      "port": "1521",
-      "service_name": "ORCLPDB"
-    },
-    {
-      "name": "prod",
-      "user": "admin",
-      "password": "secure_password",
-      "dsn": "production.server.com:1521/finance_service",
-      "mode": "SYSDBA"
-    }
-  ],
-  "global_settings": {
-    "oracle_client_path": "C:\\path\\to\\instantclient_23_0",
-    "default_database": "dev",
-    "pool_min": 2,
-    "pool_max": 10
-  }
-}
-```
+1.  Open your MCP configuration file (e.g., `c:\Users\<YourUser>\.gemini\antigravity\mcp_config.json`).
+2.  Add an `oracleConfig` section inside the `oracle-server` definition.
+3.  Add the `ORACLE_CONFIG_FILE` environment variable pointing to the config file itself.
 
-> **Note:** `oracle_client_path` must point to the folder containing `oci.dll`. We have included a valid client in `instantclient_23_0` inside the project for your convenience (e.g., `D:\Projects\mcp-oracle-server\instantclient_23_0`).
-
-### Step 3: Configure AI Client (`mcp_config.json`)
-
-To let your AI (Google Gemini, Antigravity, VS Code) know about this server, you need to add it to your MCP configuration file.
-
-**File Location:**
-
-- **Windows**: `c:\Users\<YourUser>\.gemini\antigravity\mcp_config.json` (or similar depending on your client)
-
-**Configuration to Add:**
+**Example `mcp_config.json`:**
 
 ```json
 {
@@ -140,21 +106,58 @@ To let your AI (Google Gemini, Antigravity, VS Code) know about this server, you
       "env": {
         "PYTHONIOENCODING": "utf-8",
         "PYTHONPATH": "D:\\Projects\\mcp-oracle-server\\src",
-        "ORACLE_CONFIG_DIR": "D:\\Projects\\mcp-oracle-server"
+        "ORACLE_CONFIG_FILE": "c:\\Users\\<YourUser>\\.gemini\\antigravity\\mcp_config.json",
+        "ORACLE_CLIENT_PATH": "D:\\Projects\\mcp-oracle-server\\instantclient_23_0",
+        "EXPORT_DIRECTORY": "D:\\Projects\\mcp-oracle-server\\exports"
+      },
+      "oracleConfig": {
+        "databases": [
+          {
+            "name": "dev",
+            "user": "your_username",
+            "password": "your_password",
+            "host": "localhost",
+            "port": "1521",
+            "service_name": "ORCLPDB"
+          }
+        ],
+        "global_settings": {
+          "default_database": "dev",
+          "pool_min": 2,
+          "pool_max": 10
+        }
       }
     }
   }
 }
 ```
 
-**Key Parameters Explain:**
+#### Option 2: Project-specific Configuration (`oracle_config.json`)
 
-- `command`: Uses `python` explicitly to ensure the correct environment.
-- `args`: Runs the server module.
-- `pythonpath`: **Crucial**. Point this to the `src` folder so Python can find the code.
-- `ORACLE_CONFIG_DIR`: Point this to where you saved `oracle_config.json`.
+This method keeps the configuration inside the project folder.
 
----
+1.  Find `oracle_config.example.json` in the project folder.
+2.  Rename it to `oracle_config.json`.
+3.  Update with your database details.
+4.  In your `mcp_config.json`, set `ORACLE_CONFIG_DIR` to the project folder.
+
+**Example `oracle_config.json`:**
+
+```json
+{
+  "databases": [
+    {
+      "name": "prod",
+      "user": "admin",
+      "password": "secure_password",
+      "dsn": "production.server.com:1521/finance_service"
+    }
+  ],
+  "global_settings": { ... }
+}
+```
+
+> **Note:** `oracle_client_path` must point to the folder containing `oci.dll`. We have included a valid client in `instantclient_23_0` inside the project for your convenience (e.g., `D:\Projects\mcp-oracle-server\instantclient_23_0`).
 
 ## 📁 Project Structure
 
@@ -265,6 +268,17 @@ explain_plan("SELECT * FROM large_table WHERE status = 'ACTIVE'")
 
 # Check system health across all pools
 get_session_info()
+```
+
+### 6. Safe Data Import
+
+```python
+# Step 1: Analyze file and get mapping proposal
+analyze_import_file("C:/data/users.xlsx", "USERS")
+
+# Step 2: Confirmation required! Agent must ask user.
+# Step 3: Execute with confirmed JSON
+import_data_from_file("C:/data/users.xlsx", "USERS", '{"Name":"USERNAME", "Age":"USER_AGE"}')
 ```
 
 ## 📜 License

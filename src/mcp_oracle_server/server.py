@@ -9,7 +9,9 @@ import csv
 import time
 import re
 from contextlib import contextmanager
-from typing import Optional, List, Tuple, Dict, Any
+from typing import Optional, List, Tuple, Dict, Any, Union
+import json
+import pandas as pd
 
 from mcp.server.fastmcp import FastMCP
 from .config import (
@@ -720,6 +722,168 @@ def get_session_info() -> str:
         result += "\n"
         
     return result
+
+
+# ============================================
+# IMPORT TOOLS (Human-in-the-loop)
+# ============================================
+
+@mcp.tool()
+def analyze_import_file(file_path: str, table_name: str, database_name: str = None) -> str:
+    """
+    Step 1 of Import: Analyzes a file (CSV/Excel) against a target table schema.
+    Returns a 'mapping proposal' and report.
+    Does NOT modify the database.
+    """
+    if not os.path.exists(file_path):
+        return f"Error: File not found at {file_path}"
+    
+    # 1. Read File Header
+    try:
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path, nrows=5)
+        elif file_path.endswith(('.xls', '.xlsx')):
+            df = pd.read_excel(file_path, nrows=5)
+        else:
+            return "Error: Unsupported file type. Use .csv or .xlsx"
+    except Exception as e:
+        return f"Error reading file: {e}"
+        
+    file_cols = [c.strip() for c in df.columns]
+    
+    # 2. Get Database Schema
+    with get_connection(database_name) as conn:
+        cursor = conn.cursor()
+        try:
+            if not check_table_exists(cursor, table_name):
+                return f"Error: Table '{table_name}' does not exist in DB '{database_name or 'Default'}'."
+                
+            # standardized column fetching
+            owner = None
+            t_name = table_name.upper()
+            if "." in t_name:
+                owner, t_name = t_name.split(".")
+                
+            if owner:
+                sql_cols = "SELECT column_name, data_type, nullable FROM all_tab_columns WHERE owner=:o AND table_name=:t"
+                cursor.execute(sql_cols, o=owner, t=t_name)
+            else:
+                sql_cols = "SELECT column_name, data_type, nullable FROM user_tab_columns WHERE table_name=:t"
+                cursor.execute(sql_cols, t=t_name)
+                
+            db_cols_info = cursor.fetchall() # [(COL, TYPE, NULL), ...]
+            db_cols = {row[0]: {'type': row[1], 'null': row[2]} for row in db_cols_info}
+            
+        finally:
+            cursor.close()
+            
+    # 3. Fuzzy Matching Logic
+    mapping_proposal = {}
+    missing_in_file = []
+    extra_in_file = []
+    
+    used_db_cols = set()
+    
+    # Normalize for matching (remove _, space, uppercase)
+    def normalize(s): return str(s).upper().replace("_", "").replace(" ", "")
+    
+    # Map File -> DB
+    db_col_map = {normalize(k): k for k in db_cols.keys()}
+    
+    for f_col in file_cols:
+        norm_f = normalize(f_col)
+        if norm_f in db_col_map:
+            db_target = db_col_map[norm_f]
+            mapping_proposal[f_col] = db_target
+            used_db_cols.add(db_target)
+        else:
+            extra_in_file.append(f_col)
+            
+    # Check what's missing in DB (that is required)
+    for col, info in db_cols.items():
+        if col not in used_db_cols:
+            if info['null'] == 'N': # Not Nullable -> Critical
+                missing_in_file.append(f"{col} (Required)")
+            else:
+                missing_in_file.append(col)
+
+    # 4. Generate Report
+    report = f"## Import Analysis for `{table_name}`\n"
+    report += f"**File**: `{os.path.basename(file_path)}`\n\n"
+    
+    report += "### 1. Column Mapping Status\n"
+    report += f"- ✅ **Matched**: {len(mapping_proposal)} columns\n"
+    report += f"- ⚠️ **Missing in File**: {len(missing_in_file)} columns ({', '.join(missing_in_file[:5])}...)\n"
+    report += f"- ℹ️ **Extra in File**: {len(extra_in_file)} columns (will be ignored)\n\n"
+    
+    report += "### 2. Data Preview\n"
+    report += format_as_markdown_table(df.columns.tolist(), df.values.tolist(), max_rows=3)
+    
+    # 5. Instructions for Agent
+    json_proposal = json.dumps(mapping_proposal, indent=2)
+    
+    report += "\n### 3. Action Required\n"
+    report += "**STOP! Do not proceed automatically.**\n"
+    report += "Ask the user to confirm the mapping below. If they agree, use `import_data_from_file` with this JSON:\n"
+    report += f"```json\n{json_proposal}\n```"
+    
+    return report
+
+@mcp.tool()
+def import_data_from_file(file_path: str, table_name: str, column_mapping_json: str, database_name: str = None) -> str:
+    """
+    Step 2 of Import: Executes the import using a confirmed mapping.
+    column_mapping_json: The JSON string returned by step 1 (key=FileCol, val=DBCol).
+    """
+    try:
+        mapping = json.loads(column_mapping_json)
+    except:
+        return "Error: Invalid JSON format for column_mapping."
+        
+    start_time = time.time()
+    
+    # 1. Read Full Data
+    try:
+        if file_path.endswith('.csv'):
+            df = pd.read_csv(file_path)
+        else:
+            df = pd.read_excel(file_path)
+            
+        # 2. Transform Data
+        # Keep only mapped columns and rename them to DB columns
+        df_mapped = df[list(mapping.keys())].rename(columns=mapping)
+        
+        # Ensure column order matches the INSERT statement
+        final_cols = list(df_mapped.columns)
+        
+        # Replace NaN with None (NULL)
+        df_mapped = df_mapped.where(pd.notnull(df_mapped), None)
+        
+        data_tuples = [tuple(x) for x in df_mapped.to_numpy()]
+        
+    except Exception as e:
+        return f"Error preparing data: {e}"
+        
+    # 3. Execute Batch Insert
+    with get_connection(database_name) as conn:
+        cursor = conn.cursor()
+        try:
+            # Build SQL
+            cols_str = ", ".join(final_cols)
+            binds_str = ", ".join([f":{i+1}" for i in range(len(final_cols))])
+            sql = f"INSERT INTO {table_name} ({cols_str}) VALUES ({binds_str})"
+            
+            cursor.executemany(sql, data_tuples)
+            conn.commit()
+            
+            duration = time.time() - start_time
+            return f"✅ Validated Import Successful!\n- Imported {len(data_tuples)} rows into `{table_name}`\n- Time: {duration:.2f}s"
+            
+        except Exception as e:
+            conn.rollback()
+            return f"❌ Import Failed (Rolled Back): {e}"
+        finally:
+            cursor.close()
 
 # ============================================
 # MAIN ENTRY POINT

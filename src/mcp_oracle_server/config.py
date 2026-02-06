@@ -10,11 +10,8 @@ from dotenv import load_dotenv
 from typing import Dict, Any, List
 
 # Load environment variables
+# Load environment variables
 load_dotenv()
-
-# Path to the JSON configuration file
-CONFIG_DIR = os.getenv("ORACLE_CONFIG_DIR", os.getcwd())
-CONFIG_FILE_PATH = os.path.join(CONFIG_DIR, 'oracle_config.json')
 
 # ============================================
 # CONFIGURATION LOADING LOGIC
@@ -22,7 +19,7 @@ CONFIG_FILE_PATH = os.path.join(CONFIG_DIR, 'oracle_config.json')
 
 def load_config() -> Dict[str, Any]:
     """
-    Loads configuration from oracle_config.json if it exists.
+    Loads configuration from a JSON file (standard or embedded in mcp_config.json).
     Otherwise, falls back to .env variables for a single default connection.
     """
     config = {
@@ -30,12 +27,32 @@ def load_config() -> Dict[str, Any]:
         "global": {}
     }
 
+    # Determine config file path
+    # Priority 1: Explicit file path from env
+    config_file = os.getenv("ORACLE_CONFIG_FILE")
+    
+    # Priority 2: Standard file in config dir
+    if not config_file:
+        config_dir = os.getenv("ORACLE_CONFIG_DIR", os.getcwd())
+        candidate = os.path.join(config_dir, 'oracle_config.json')
+        if os.path.exists(candidate):
+            config_file = candidate
+
     # 1. Try loading from JSON
-    if os.path.exists(CONFIG_FILE_PATH):
+    if config_file and os.path.exists(config_file):
         try:
-            with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
-                json_config = json.load(f)
-                
+            with open(config_file, 'r', encoding='utf-8') as f:
+                raw_data = json.load(f)
+            
+            json_config = {}
+            # Case A: Standard oracle_config.json structure
+            if "databases" in raw_data:
+                json_config = raw_data
+            # Case B: Embedded in mcp_config.json (inside mcpServers -> oracle-server -> oracleConfig)
+            elif "mcpServers" in raw_data:
+                server_conf = raw_data.get("mcpServers", {}).get("oracle-server", {})
+                json_config = server_conf.get("oracleConfig", {})
+
             # Parse Global Settings
             g_settings = json_config.get("global_settings", {})
             config["global"] = {
@@ -76,12 +93,9 @@ def load_config() -> Dict[str, Any]:
             # If loaded successfully, return
             if config["databases"]:
                 return config
-            
-            # If JSON exists but has no valid DBs, warn and fall through to ENV check? 
-            # Ideally we return strict if JSON exists. But let's allow fallback if empty.
 
         except Exception as e:
-            print(f"Warning: Failed to load oracle_config.json: {e}. Falling back to .env")
+            print(f"Warning: Failed to load config from {config_file}: {e}. Falling back to .env")
 
     # 2. Fallback to .env (Single DB Mode)
     oracle_user = os.getenv("ORACLE_USER")

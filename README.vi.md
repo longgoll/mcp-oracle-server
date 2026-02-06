@@ -56,9 +56,11 @@ _(Tất cả công cụ nay hỗ trợ tham số tùy chọn `database_name`)_
 
 #### 📤 Import/Export
 
-| Công cụ               | Mô tả                             |
-| --------------------- | --------------------------------- |
-| `export_query_to_csv` | Xuất kết quả truy vấn ra file CSV |
+| Công cụ                 | Mô tả                                                        |
+| ----------------------- | ------------------------------------------------------------ |
+| `export_query_to_csv`   | Xuất kết quả truy vấn ra file CSV                            |
+| `analyze_import_file`   | **Bước 1:** Kiểm tra & map cột file Excel/CSV trước khi nhập |
+| `import_data_from_file` | **Bước 2:** Thực thi nhập liệu hàng loạt (Cần bước 1 trước)  |
 
 ## 🚀 Hướng dẫn Cài đặt & Thiết lập
 
@@ -78,33 +80,74 @@ Chúng tôi đã tối ưu hóa quá trình cài đặt vào một file script d
       ```
     - Script này sẽ tự động cài đặt các thư viện Python cần thiết và đăng ký lệnh `mcp-oracle-server`.
 
-### Bước 2: Cấu hình Kết nối Database (`oracle_config.json`)
+### Bước 2: Cấu hình Kết nối Database
 
-Mọi thông tin kết nối database sẽ được lưu ở đây. Server hỗ trợ kết nối nhiều DB cùng lúc.
+Bạn có 2 cách để cấu hình database.
 
-1.  Tìm file `oracle_config.example.json` trong thư mục dự án.
-2.  Đổi tên nó thành `oracle_config.json`.
-3.  Mở file và cập nhật thông tin database của bạn.
+#### Cách 1: Cấu hình tập trung (Khuyên dùng)
 
-**Ví dụ nội dung `oracle_config.json` chuẩn:**
+Bạn có thể nhúng trực tiếp cấu hình Oracle vào file cấu hình MCP của client (ví dụ: `mcp_config.json`). Cách này giúp giữ cài đặt ở một nơi và dễ dàng chuyển đổi dự án mà không mất kết nối.
+
+1.  Mở file cấu hình MCP của bạn (ví dụ: `c:\Users\User\.gemini\antigravity\mcp_config.json`).
+2.  Thêm phần `oracleConfig` vào trong phần định nghĩa của `oracle-server`.
+3.  Thêm biến môi trường `ORACLE_CONFIG_FILE` trỏ đến chính file cấu hình đó.
+
+**Ví dụ `mcp_config.json`:**
+
+```json
+{
+  "mcpServers": {
+    "oracle-server": {
+      "command": "python",
+      "args": ["-m", "mcp_oracle_server"],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONPATH": "D:\\Projects\\mcp-oracle-server\\src",
+        "ORACLE_CONFIG_FILE": "c:\\Users\\User\\.gemini\\antigravity\\mcp_config.json",
+        "ORACLE_CLIENT_PATH": "D:\\Projects\\mcp-oracle-server\\instantclient_23_0",
+        "EXPORT_DIRECTORY": "D:\\Projects\\mcp-oracle-server\\exports"
+      },
+      "oracleConfig": {
+        "databases": [
+          {
+            "name": "dev",
+            "user": "your_username",
+            "password": "your_password",
+            "host": "localhost",
+            "port": "1521",
+            "service_name": "ORCLPDB"
+          }
+        ],
+        "global_settings": {
+          "default_database": "dev",
+          "pool_min": 2,
+          "pool_max": 10
+        }
+      }
+    }
+  }
+}
+```
+
+#### Cách 2: Cấu hình theo dự án (`oracle_config.json`)
+
+Cách này giữ file cấu hình trong thư mục mã nguồn dự án.
+
+1.  Tìm `oracle_config.example.json` trong thư mục dự án.
+2.  Đổi tên thành `oracle_config.json`.
+3.  Cập nhật với thông tin database của bạn.
+4.  Trong `mcp_config.json`, đặt biến môi trường `ORACLE_CONFIG_DIR` trỏ đến thư mục dự án.
+
+**Ví dụ `oracle_config.json`:**
 
 ```json
 {
   "databases": [
     {
-      "name": "nim059",
-      "user": "your_username",
-      "password": "your_password",
-      "host": "192.168.1.xxx",
-      "port": "1521",
-      "service_name": "orclpdb"
-    },
-    {
-      "name": "local_dev",
-      "user": "sys",
-      "password": "password123",
-      "dsn": "localhost:1521/orcl",
-      "mode": "SYSDBA"
+      "name": "prod",
+      "user": "admin",
+      "password": "secure_password",
+      "dsn": "production.server.com:1521/finance_service"
     }
   ],
   "global_settings": {
@@ -235,6 +278,17 @@ list_tables(database_name="finance_prod")
 ```python
 # Uses the default_database defined in json
 describe_table("PRODUCTS")
+```
+
+### 4. Nhập liệu An toàn (Data Import)
+
+```python
+# Bước 1: Phân tích file và lấy đề xuất ghép cột
+analyze_import_file("C:/data/nhanvien.xlsx", "NHAN_VIEN")
+
+# Bước 2: AI BẮT BUỘC phải hỏi ý kiến người dùng!
+# Bước 3: Chạy import với JSON đã xác nhận
+import_data_from_file("C:/data/nhanvien.xlsx", "NHAN_VIEN", '{"HoTen":"FULLNAME", "Tuoi":"AGE"}')
 ```
 
 ## 📜 Giấy phép
