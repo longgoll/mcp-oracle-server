@@ -2,6 +2,8 @@
 
 [English](README.md) | [Tiếng Việt](README.vi.md)
 
+> 💡 **New here? What is MCP?** 👉 [Read the beginner's guide here](MCP_CONCEPTS.md)
+
 A comprehensive **Model Context Protocol (MCP)** server for Oracle Database operations. This server enables AI assistants to interact with Oracle databases through a secure, well-defined interface.
 
 ## 🌟 Features

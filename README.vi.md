@@ -2,6 +2,8 @@
 
 [English](README.md) | [Tiếng Việt](README.vi.md)
 
+> 💡 **Bạn mới? Chưa hiểu MCP là gì?** 👉 [Đọc bài giới thiệu dành cho người mới tại đây](MCP_CONCEPTS.vi.md)
+
 Một **Model Context Protocol (MCP)** server toàn diện cho các thao tác Oracle Database. Server này cho phép các trợ lý AI tương tác với cơ sở dữ liệu Oracle thông qua giao diện an toàn và được định nghĩa rõ ràng.
 
 ## 🌟 Tính năng Mới (Multi-Database)
