@@ -988,14 +988,19 @@ def generate_mock_data(table_name: str, row_count: int = 10, database_name: str 
                     # Heuristic for data generation
                     if "ID" in col and dtype == "NUMBER":
                         val = faker.unique.random_int(min=1, max=999999)
-                    elif dtype in ("VARCHAR2", "CHAR"):
-                        if "NAME" in col: val = faker.name()[:dlen]
-                        elif "EMAIL" in col: val = faker.email()[:dlen]
-                        elif "PHONE" in col: val = faker.phone_number()[:dlen]
-                        elif "ADDRESS" in col: val = faker.address()[:dlen]
-                        elif "CITY" in col: val = faker.city()[:dlen]
-                        elif "COUNTRY" in col: val = faker.country()[:dlen]
-                        else: val = faker.text(max_nb_chars=min(dlen, 20))
+                    elif dtype in ("VARCHAR2", "CHAR", "NVARCHAR2"):
+                        if "NAME" in col: val = faker.name()
+                        elif "EMAIL" in col: val = faker.email()
+                        elif "PHONE" in col: val = faker.phone_number()
+                        elif "ADDRESS" in col: val = faker.address()
+                        elif "CITY" in col: val = faker.city()
+                        elif "COUNTRY" in col: val = faker.country()
+                        else: val = faker.text(max_nb_chars=min(dlen, 100))
+                        
+                        # Truncate to fit column length
+                        if val and len(val) > dlen:
+                            val = val[:dlen]
+                            
                     elif dtype == "NUMBER":
                         val = faker.random_int(min=0, max=1000)
                     elif dtype == "DATE":
