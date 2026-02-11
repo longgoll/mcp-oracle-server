@@ -497,16 +497,30 @@ def explain_query_plan(sql_query: str, database_name: str = None) -> str:
              cursor.close()
 
 @mcp.tool()
-def export_query_to_csv(sql_query: str, filename: str, database_name: str = None) -> str:
+def export_query_to_csv(sql_query: str, filename: str, output_path: str = None, database_name: str = None) -> str:
     """
     Exports query results to a CSV file.
-    Filename should end in .csv. Files are saved to the configured export directory.
+    output_path: Optional absolute path to save the file (e.g. 'D:/Data/report.csv').
+    If output_path is provided, 'filename' is ignored (or used as fallback if path is a dir).
+    If output_path is NOT provided, saves to configured EXPORT_DIRECTORY with 'filename'.
     """
-    if not filename.lower().endswith('.csv'):
-        filename += '.csv'
+    # Determine full path
+    if output_path:
+        # Check if user made a directory or file path
+        if os.path.isdir(output_path):
+            full_path = os.path.join(output_path, filename)
+        else:
+             full_path = output_path
+    else:
+        full_path = os.path.join(EXPORT_DIRECTORY, filename)
+
+    if not full_path.lower().endswith('.csv'):
+        full_path += '.csv'
         
-    full_path = os.path.join(EXPORT_DIRECTORY, filename)
-    os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    try:
+        os.makedirs(os.path.dirname(full_path), exist_ok=True)
+    except Exception as e:
+        return f"Error creating directory for {full_path}: {e}"
     
     with get_connection(database_name) as conn:
         cursor = conn.cursor()
