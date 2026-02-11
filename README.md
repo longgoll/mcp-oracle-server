@@ -61,6 +61,15 @@ _(All tools now support optional `database_name` argument)_
 | `inspect_locks`      | View blocking sessions and locks        |
 | `kill_session`       | Kill a stuck session (Use with caution) |
 
+#### 🛠️ Maintenance & Dev Tools (New!)
+
+| Tool                     | Description                                    |
+| ------------------------ | ---------------------------------------------- |
+| `list_invalid_objects`   | Lists broken procedures/packages for debugging |
+| `compile_object`         | Recompiles an invalid object (Proc, Func, Pkg) |
+| `check_tablespace_usage` | **Storage Monitoring**: View disk usage per TS |
+| `generate_mock_data`     | **Mock Data**: Generates fake data for testing |
+
 #### 📤 Import/Export
 
 | Tool                    | Description                                                |

@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from typing import Optional, List, Tuple, Dict, Any, Union
 import json
 import pandas as pd
+from faker import Faker
 
 from mcp.server.fastmcp import FastMCP
 from .config import (
@@ -828,6 +829,184 @@ def analyze_import_file(file_path: str, table_name: str, database_name: str = No
     report += f"```json\n{json_proposal}\n```"
     
     return report
+
+# ============================================
+# MAINTENANCE & DEV TOOLS (New!)
+# ============================================
+
+@mcp.tool()
+def list_invalid_objects(database_name: str = None) -> str:
+    """
+    Lists all Invalid objects in the current schema.
+    Useful for developers to check broken procedures/packages.
+    """
+    with get_connection(database_name) as conn:
+        cursor = conn.cursor()
+        try:
+            sql = """
+                SELECT object_name, object_type, last_ddl_time 
+                FROM user_objects 
+                WHERE status = 'INVALID' 
+                ORDER BY object_type, object_name
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            
+            if not rows: return "✅ All objects are VALID."
+            
+            result = "## ⚠️ Invalid Objects Found\n\n"
+            result += "| Object Name | Type | Last Modified |\n|---|---|---|\n"
+            for row in rows:
+                result += f"| {row[0]} | {row[1]} | {row[2]} |\n"
+            
+            result += "\nUse `compile_object` to attempt to fix these."
+            return result
+        except Exception as e:
+            return f"Error: {e}"
+        finally:
+            cursor.close()
+
+@mcp.tool()
+def compile_object(object_name: str, object_type: str, database_name: str = None) -> str:
+    """
+    Attempts to recompile an Invalid object.
+    object_type: PROCEDURE, FUNCTION, PACKAGE, VIEW, TRIGGER.
+    """
+    allowed_types = ["PROCEDURE", "FUNCTION", "PACKAGE", "VIEW", "TRIGGER", "PACKAGE BODY"]
+    obj_type = object_type.upper().replace("_", " ") # Handle PACKAGE_BODY -> PACKAGE BODY
+    
+    if obj_type not in allowed_types:
+        return f"Error: Unsupported object type '{object_type}'. Supported: {', '.join(allowed_types)}"
+        
+    with get_connection(database_name) as conn:
+        cursor = conn.cursor()
+        try:
+            # Safe compilation
+            sql = f"ALTER {obj_type} {object_name} COMPILE"
+            if obj_type == "PACKAGE BODY":
+                # Special syntax for package body sometimes needed or handled by standard 'ALTER PACKAGE name COMPILE BODY'
+                # But standard SQL for body is: ALTER PACKAGE <name> COMPILE BODY
+                sql = f"ALTER PACKAGE {object_name} COMPILE BODY"
+                
+            cursor.execute(sql)
+            return f"✅ Successfully compiled {obj_type} `{object_name}`."
+        except oracledb.DatabaseError as e:
+            error, = e.args
+            return f"❌ Compilation Failed for `{object_name}`:\n{error.message}"
+        finally:
+            cursor.close()
+
+@mcp.tool()
+def check_tablespace_usage(database_name: str = None) -> str:
+    """
+    Checks the usage of Tablespaces (Storage monitoring).
+    Requires appropriate permissions (usually restricted to DB As usually).
+    Will try to run best-effort query.
+    """
+    with get_connection(database_name) as conn:
+        cursor = conn.cursor()
+        try:
+            # This query attempts to use DBA views. If it fails, we fall back or report error.
+            # Calculates Total, Used, Free, % Free
+            sql = """
+            SELECT 
+                df.tablespace_name,
+                ROUND(df.bytes / (1024 * 1024), 2) AS total_mb,
+                ROUND((df.bytes - fs.bytes) / (1024 * 1024), 2) AS used_mb,
+                ROUND(fs.bytes / (1024 * 1024), 2) AS free_mb,
+                ROUND((fs.bytes / df.bytes) * 100, 2) AS free_pct
+            FROM 
+                (SELECT tablespace_name, SUM(bytes) bytes FROM dba_data_files GROUP BY tablespace_name) df,
+                (SELECT tablespace_name, SUM(bytes) bytes FROM dba_free_space GROUP BY tablespace_name) fs
+            WHERE 
+                df.tablespace_name = fs.tablespace_name
+            ORDER BY 
+                free_pct ASC
+            """
+            cursor.execute(sql)
+            rows = cursor.fetchall()
+            
+            if not rows: return "No tablespace info found (Permissions?)."
+            
+            result = "## 💾 Tablespace Usage\n\n"
+            result += "| Tablespace | Total (MB) | Used (MB) | Free (MB) | Free % |\n|---|---|---|---|---|\n"
+            for r in rows:
+                status_icon = "🟢" if r[4] > 20 else ("🟡" if r[4] > 5 else "🔴")
+                result += f"| {r[0]} | {r[1]:,} | {r[2]:,} | {r[3]:,} | {status_icon} {r[4]}% |\n"
+            return result
+        except oracledb.DatabaseError as e:
+            if "ORA-00942" in str(e):
+                return "❌ Permission Error: Cannot access DBA_DATA_FILES/DBA_FREE_SPACE. This tool requires DBA privileges."
+            return f"Error checking storage: {e}"
+        finally:
+            cursor.close()
+
+@mcp.tool()
+def generate_mock_data(table_name: str, row_count: int = 10, database_name: str = None) -> str:
+    """
+    Generates and inserts fake/mock data into a table for testing.
+    Uses 'Faker' library to guess data types.
+    """
+    if row_count > 1000: return "Error: Max 1000 rows allowed per batch."
+    faker = Faker()
+    
+    with get_connection(database_name) as conn:
+        cursor = conn.cursor()
+        try:
+            # 1. Get Schema
+            cursor.execute("SELECT column_name, data_type, data_length FROM user_tab_columns WHERE table_name = :tn ORDER BY column_id", tn=table_name.upper())
+            cols_info = cursor.fetchall()
+            if not cols_info: return f"Table `{table_name}` not found."
+            
+            columns = [c[0] for c in cols_info]
+            types = {c[0]: c[1] for c in cols_info}
+            lengths = {c[0]: c[2] for c in cols_info}
+            
+            # 2. Generate Data
+            data_rows = []
+            for _ in range(row_count):
+                row_data = []
+                for col in columns:
+                    dtype = types[col]
+                    dlen = lengths[col]
+                    val = None
+                    
+                    # Heuristic for data generation
+                    if "ID" in col and dtype == "NUMBER":
+                        val = faker.unique.random_int(min=1, max=999999)
+                    elif dtype in ("VARCHAR2", "CHAR"):
+                        if "NAME" in col: val = faker.name()[:dlen]
+                        elif "EMAIL" in col: val = faker.email()[:dlen]
+                        elif "PHONE" in col: val = faker.phone_number()[:dlen]
+                        elif "ADDRESS" in col: val = faker.address()[:dlen]
+                        elif "CITY" in col: val = faker.city()[:dlen]
+                        elif "COUNTRY" in col: val = faker.country()[:dlen]
+                        else: val = faker.text(max_nb_chars=min(dlen, 20))
+                    elif dtype == "NUMBER":
+                        val = faker.random_int(min=0, max=1000)
+                    elif dtype == "DATE":
+                        val = faker.date_between(start_date="-1y", end_date="today")
+                    elif dtype.startswith("TIMESTAMP"):
+                        val = faker.date_time()
+                        
+                    row_data.append(val)
+                data_rows.append(tuple(row_data))
+                
+            # 3. Insert
+            placeholders = ",".join([f":{i+1}" for i in range(len(columns))])
+            sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
+            
+            cursor.executemany(sql, data_rows)
+            conn.commit()
+            
+            return f"✅ Successfully generated and inserted {row_count} rows into `{table_name}`."
+            
+        except Exception as e:
+            conn.rollback()
+            return f"Error generating data: {e}"
+        finally:
+            cursor.close()
+
 
 @mcp.tool()
 def import_data_from_file(file_path: str, table_name: str, column_mapping_json: str, database_name: str = None) -> str:
